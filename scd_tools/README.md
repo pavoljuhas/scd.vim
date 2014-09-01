@@ -105,46 +105,6 @@ scd --alias=xray
 scd xray
 ```
 
-## Installation as Vim plugin
-
-1.  Copy or symlink [vim/plugin/scd.vim](vim/plugin/scd.vim)
-    file to the `~/.vim/plugin/` directory or source it from `.vimrc`.
-
-2.  If `scd` is not in the PATH, set the `g:scd_command` variable in `.vimrc`
-    to specify its location.
-    ```VimL
-    let g:scd_command = '/path/to/scd'
-    ```
-
-3.  When Vim is set to use zsh for system commands `:set shell=/bin/zsh`, scd
-    aliases can be expanded in Vim command mode, as in `:e ~foo/file.txt`.
-    Allow this by adding the following line to `~/.zshenv`
-    ```sh
-    if [[ -s ~/.scdalias.zsh ]]; then source ~/.scdalias.zsh; fi
-    ```
-
-## Examples
-
-```VimL
-" recursively index ~/.vim/ and its subdirectories
-:Scd -ar ~/.vim
-
-" jump to the ~/.vim/ftplugin/ directory
-:Scd vi ftpl
-
-" change to the most recently visited doc directory
-:Scd doc
-
-" show selection menu with directories ranked by likelihood
-:Scd -v
-
-" same as Scd, but use the :lcd Vim command
-:Slcd
-
-" complete scd-defined directory aliases
-:Scd <Tab>
-```
-
 
 ## Installation as IPython extension
 
