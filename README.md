@@ -35,7 +35,7 @@ and configuration details.
 
 ## Installation
 
-*scd.vim is for Linux, Mac, or other UNIX-like operating systems only.*
+*scd.vim is for Linux, Mac, or other unix-like operating systems only.*
 
 1.  Make sure that [Z shell](http://www.zsh.org/) is installed or install
     it with `sudo apt-get install zsh`.
