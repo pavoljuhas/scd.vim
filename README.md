@@ -78,6 +78,12 @@ the `scd` script location can be also specified in .vimrc as
 let g:scd_command = '/path/to/scd'
 ```
 
+When Vim is set to use zsh for system commands `:set shell=/bin/zsh`, scd
+aliases can be expanded in Vim command mode, as in `:e ~foo/file.txt`.
+Allow this by adding the following line to `~/.zshenv`
+```sh
+if [[ -s ~/.scdalias.zsh ]]; then source ~/.scdalias.zsh; fi
+```
 
 ## Repository remarks
 
