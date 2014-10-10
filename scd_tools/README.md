@@ -128,6 +128,7 @@ scd xray
    ```Python
    import ipy_scd
    ipy_scd.scd_executable = '/path/to/scd'
+   ```
 
 ## Examples
 
