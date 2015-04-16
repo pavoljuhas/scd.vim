@@ -70,7 +70,7 @@ scd [options] [pattern1 pattern2 ...]
     and have it source the corresponding scd setup file from
     [shellrcfiles](shellrcfiles).
     ```sh
-    source ~/Downloads/smart-change-directory/shellrcfiles/bashrc_scd
+    source ~/.vim/bundle/scd.vim/scd_tools/shellrcfiles/bashrc_scd
     ```
 
     For recent versions of Zsh use `zshrc_scd`.  Use `zshrc_scd_42` for Zsh

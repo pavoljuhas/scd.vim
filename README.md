@@ -45,14 +45,14 @@ and configuration details.
 
     ```sh
     cd ~/.vim/bundle
-    git clone https://github.com/pavoljuhas/scd.vim.git
+    git clone https://github.com/pavoljuhas/scd.vim
     ```
 
     Another option of installing scd.vim is to create a symbolic link
     in the Vim plugin directory
 
     ```sh
-    git clone https://github.com/pavoljuhas/scd.vim.git
+    git clone https://github.com/pavoljuhas/scd.vim
     ln -si $PWD/scd.vim/plugin/scd.vim ~/.vim/plugin/
     ```
 
@@ -96,7 +96,7 @@ if [[ -s ~/.scdalias.zsh ]]; then source ~/.scdalias.zsh; fi
 ## Repository remarks
 
 This repository derives from the upstream
-[smart-change-directory.git](https://github.com/pavoljuhas/smart-change-directory)
+[smart-change-directory](https://github.com/pavoljuhas/smart-change-directory)
 project with files reorganized according to the Vim plugin conventions.
 The content of both repositories is otherwise fairly equal, except that
-smart-change-directory.git should have the latest sources.
+smart-change-directory should have the latest sources.
