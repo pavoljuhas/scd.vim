@@ -1,7 +1,7 @@
 " scd.vim -- Vim plugin for Smart Change of Directory
-" Date: 2015-04-18
+" Date: 2015-04-20
 " Maintainer: Pavol Juhas <pavol.juhas@gmail.com>
-" URL: https://github.com/pavoljuhas/smart-change-directory/
+" URL: https://github.com/pavoljuhas/scd.vim
 "
 " Requirements:
 "
@@ -33,7 +33,7 @@
 "       let g:scd_autoindex = 0
 "
 "   For best results activate scd also in the system shell as described at
-"   https://github.com/pavoljuhas/smart-change-directory#installation
+"   https://github.com/pavoljuhas/scd.vim/blob/master/scd_tools/README.md#installation
 "
 " Examples:
 "
