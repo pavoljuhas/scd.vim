@@ -39,8 +39,9 @@ scd [options] [pattern1 pattern2 ...]
   <em>~/.scdalias.zsh</em>.</dd><dt>
 
 -A, --all</dt><dd>
-  include all matching directories.  Disregard matching by directory
-  alias and filtering of less likely paths.</dd><dt>
+  display all directories even those excluded by patterns in
+  <em>~/.scdignore</em>.  Disregard the unique matching for a
+  directory alias and filtering of less likely paths.</dd><dt>
 
 --list</dt><dd>
   show matching directories and exit.</dd><dt>
@@ -60,24 +61,48 @@ scd [options] [pattern1 pattern2 ...]
 1.  Make sure that Z shell is installed.  On Linux it is usually the `zsh`
     package.
 
-2.  Copy or symlink the [bin/scd](bin/scd) script to some
-    directory in the PATH.  Make sure `scd` has executable permissions set or
-    add them with `chmod +x scd`.
+2.  Copy or symlink the [bin/scd](bin/scd) script to some directory
+    in the PATH.
 
 3.  Find out what shell is active for your account by running `ps -p $$`.
 
-4.  Edit the startup file for your shell, e.g., `.bashrc` for `bash`,
-    and have it source the corresponding scd setup file from
-    [shellrcfiles](shellrcfiles).
-    ```sh
-    source ~/.vim/bundle/scd.vim/scd_tools/shellrcfiles/bashrc_scd
-    ```
+4.  Edit the startup file for your shell and have it source the
+    corresponding scd setup file from [shellrcfiles](shellrcfiles)
+    as follows:
 
-    For recent versions of Zsh use `zshrc_scd`.  Use `zshrc_scd_42` for Zsh
-    version 4.2 or older.  Note that scd aliases are named directories in Zsh
-    and thus can be expanded as `~NAME` in the shell.
+    * *zsh*
 
-    For `dash` or old Bource shells, replace `source` command above with `.`.
+      ```zsh
+      # ~/.zshrc
+      source ~/.vim/bundle/scd.vim/scd_tools/shellrcfiles/zshrc_scd
+      ```
+
+      Note that scd aliases are named directories in Zsh and can
+      be thus expanded as `~NAME` in the shell.  If you use the
+      [oh-my-zsh](https://github.com/robbyrussell/oh-my-zsh)
+      framework you may just activate the `scd` plugin instead.
+      If you have zsh 4.2 or older source `zshrc_scd_42`.
+
+    * *bash*
+
+      ```bash
+      # ~/.bashrc
+      source ~/.vim/bundle/scd.vim/scd_tools/shellrcfiles/bashrc_scd
+      ```
+
+    * *tcsh*
+
+      ```sh
+      # ~/.cshrc
+      source ~/.vim/bundle/scd.vim/scd_tools/shellrcfiles/tcshrc_scd
+      ```
+
+    * *dash*
+
+      ```sh
+      # add to ~/.profile or to the ${ENV} file
+      . ~/.vim/bundle/scd.vim/scd_tools/shellrcfiles/dashrc_scd
+      ```
 
 
 ## Examples
@@ -143,7 +168,15 @@ scd xray
     time-stamped index of visited directories.</dd><dt>
 
 ~/.scdalias.zsh</dt><dd>
-    scd-generated definitions of directory aliases.</dd>
+    scd-generated definitions of directory aliases.</dd><dt>
+
+~/.scdignore</dt><dd>
+    <a href="http://zsh.sourceforge.net/Doc/Release/Expansion.html#Glob-Operators">
+    glob patterns</a> for paths to be ignored in the scd search, for example,
+    <code>/mnt/backup/*</code>.  The patterns are specified one per line
+    and are matched assuming the <em>extendedglob</em> zsh option.  Lines
+    starting with "#" are skipped as comments.  The .scdignore patterns
+    are not applied in the <em>--all</em> mode.</dd>
 </dl>
 
 # ENVIRONMENT
