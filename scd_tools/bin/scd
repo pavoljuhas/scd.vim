@@ -1,10 +1,11 @@
 #!/bin/zsh -f
 
 emulate -L zsh
+
+local RUNNING_AS_COMMAND=
 local EXIT=return
 if [[ $(whence -w $0) == *:' 'command ]]; then
-    emulate -R zsh
-    local RUNNING_AS_COMMAND=1
+    RUNNING_AS_COMMAND=1
     EXIT=exit
 fi
 
@@ -42,6 +43,12 @@ local SCD_IGNORE=~/.scdignore
 # Minimum logarithm of probability.  Avoids out of range warning in exp().
 local -r MINLOGPROB=-15
 
+# When false, use case-insensitive globbing to fix PWD capitalization.
+local PWDCASECORRECT=true
+if [[ ${OSTYPE} == darwin* ]]; then
+    PWDCASECORRECT=false
+fi
+
 local a d m p i maxrank threshold
 local opt_help opt_add opt_unindex opt_recursive opt_verbose
 local opt_alias opt_unalias opt_all opt_list
@@ -49,7 +56,7 @@ local -A drank dalias scdignore
 local dmatching
 local last_directory
 
-setopt extendedhistory extendedglob noautonamedirs brace_ccl
+setopt extendedglob noautonamedirs brace_ccl
 
 # If SCD_SCRIPT is defined make sure that that file exists and is empty.
 # This removes any old previous commands from the SCD_SCRIPT file.
@@ -82,12 +89,18 @@ fi
 
 # load scd-ignore patterns if available
 if [[ -s $SCD_IGNORE ]]; then
+    setopt noglob
     <$SCD_IGNORE \
     while read p; do
         [[ $p != [\#]* ]] || continue
         [[ -n $p ]] || continue
+        # expand leading tilde if it has valid expansion
+        if [[ $p == [~]* ]] && ( : ${~p} ) 2>/dev/null; then
+            p=${~p}
+        fi
         scdignore[$p]=1
     done
+    setopt glob
 fi
 
 # Private internal functions are prefixed with _scd_Y19oug_.
@@ -98,9 +111,17 @@ trap 'unfunction -m "_scd_Y19oug_*"' EXIT
 # works faster than the (:a) modifier and is compatible with zsh 4.2.6
 _scd_Y19oug_abspath() {
     set -A $1 ${(ps:\0:)"$(
-        unfunction -m "*"; shift
+        setopt pushdsilent
+        unfunction -m "*"
+        unalias -m "*"
+        unset CDPATH
+        shift
         for d; do
-            cd $d && print -Nr -- $PWD && cd $OLDPWD
+            pushd $d || continue
+            $PWDCASECORRECT &&
+                print -Nr -- $PWD ||
+                print -Nr -- (#i)$PWD
+            popd
         done
         )"}
 }
@@ -125,28 +146,38 @@ if [[ -n $opt_alias ]]; then
     $EXIT $?
 fi
 
-# undefine directory alias
+# undefine one or more directory aliases
 if [[ -n $opt_unalias ]]; then
-    d=${1:-$PWD}
-    if [[ ${+nameddirs[$d]} == 0 && -d $d ]]; then
-        _scd_Y19oug_abspath d $d
-    fi
-    a=${(k)nameddirs[$d]:-${(k)nameddirs[(r)$d]}}
-    if [[ -z $a ]]; then
-        print -u2 "'$1' is neither a directory alias nor an aliased path."
-        $EXIT 1
-    fi
-    # unalias in the current shell, update alias file if successful
-    if unhash -d -- $a 2>/dev/null && [[ -r $SCD_ALIAS ]]; then
+    local ec=0
+    m=( )
+    for p in ${*:-${PWD}}; do
+        d=$p
+        if [[ ${+nameddirs[$d]} == 0 && -d $d ]]; then
+            _scd_Y19oug_abspath d $d
+        fi
+        a=${(k)nameddirs[$d]:-${(k)nameddirs[(r)$d]}}
+        if [[ -z $a ]]; then
+            ec=1
+            print -u2 "'$p' is neither a directory alias nor an aliased path."
+            continue
+        fi
+        # unalias in the current shell and remember to update the alias file
+        if unhash -d -- $a 2>/dev/null; then
+            m+=( $a )
+        fi
+    done
+    if [[ $#m != 0 && -r $SCD_ALIAS ]]; then
         (
             umask 077
             hash -dr
             source $SCD_ALIAS
-            unhash -d -- $a 2>/dev/null &&
-                hash -dL >| $SCD_ALIAS
-        )
+            for a in $m; do
+                unhash -d -- $a 2>/dev/null
+            done
+            hash -dL >| $SCD_ALIAS
+        ) || ec=$?
     fi
-    $EXIT $?
+    $EXIT $ec
 fi
 
 # The "compress" function collapses repeated directories into
@@ -156,18 +187,20 @@ _scd_Y19oug_compress() {
         -v meanlife=$SCD_MEANLIFE \
         -v minlogprob=$MINLOGPROB \
         '
-        BEGIN { FS = "[:;]"; }
+        BEGIN {
+            FS = "[:;]";
+            pmin = exp(minlogprob);
+        }
         length($0) < 4096 && $2 > 0 {
+            df = $0;
+            sub("^[^;]*;", "", df);
+            if (!df)  next;
             tau = 1.0 * ($2 - epochseconds) / meanlife;
-            if (tau < minlogprob)  tau = minlogprob;
-            prob = exp(tau);
-            sub(/^[^;]*;/, "");
-            if (NF)  {
-                dlist[last[$0]] = "";
-                dlist[NR] = $0;
-                last[$0] = NR;
-                ptot[$0] += prob;
-            }
+            prob = (tau < minlogprob) ? pmin : exp(tau);
+            dlist[last[df]] = "";
+            dlist[NR] = df;
+            last[df] = NR;
+            ptot[df] += prob;
         }
         END {
             for (i = 1; i <= NR; ++i) {
@@ -184,23 +217,31 @@ _scd_Y19oug_compress() {
 # Rewrite directory index if it is at least 20% oversized.
 if [[ -s $SCD_HISTFILE ]] && \
 (( $(wc -l <$SCD_HISTFILE) > 1.2 * $SCD_HISTSIZE )); then
-    # compress repeated entries
-    m=( ${(f)"$(_scd_Y19oug_compress $SCD_HISTFILE)"} )
-    # purge non-existent and ignored directories
-    m=( ${(f)"$(
-        for a in $m; do
-            d=${a#*;}
-            [[ -z ${scdignore[(k)$d]} ]] || continue
-            [[ -d $d ]] || continue
-            print -r -- $a
-        done
-        )"}
-    )
-    # cut old entries if still oversized
-    if [[ $#m -gt $SCD_HISTSIZE ]]; then
-        m=( ${m[-$SCD_HISTSIZE,-1]} )
-    fi
-    print -lr -- $m >| ${SCD_HISTFILE}
+    # Compress repeated entries in a background process.
+    (
+        m=( ${(f)"$(_scd_Y19oug_compress $SCD_HISTFILE)"} )
+        curhistsize=( $(wc -l <$SCD_HISTFILE) )
+        # purge non-existent and ignored directories
+        m=( ${(f)"$(
+            for a in $m; do
+                d=${a#*;}
+                [[ -z ${scdignore[(k)$d]} ]] || continue
+                [[ -d $d ]] || continue
+                $PWDCASECORRECT || d=( (#i)${d} )
+                t=${a%%;*}
+                print -r -- "${t};${d}"
+            done
+            )"}
+        )
+        # cut old entries if still oversized
+        if [[ $#m -gt $SCD_HISTSIZE ]]; then
+            m=( ${m[-$SCD_HISTSIZE,-1]} )
+        fi
+        # Checking existence of many directories could have taken a while.
+        # Append any index entries added in meantime.
+        m+=( ${(f)"$(sed "1,${curhistsize}d" $SCD_HISTFILE)"} )
+        print -lr -- $m >| ${SCD_HISTFILE}
+    ) &|
 fi
 
 # Determine the last recorded directory
@@ -272,7 +313,7 @@ fi
 
 # The "action" function is called when there is just one target directory.
 _scd_Y19oug_action() {
-    cd $1 || return $?
+    builtin cd $1 || return $?
     if [[ -z $SCD_SCRIPT && -n $RUNNING_AS_COMMAND ]]; then
         print -u2 "Warning: running as command with SCD_SCRIPT undefined."
     fi
@@ -305,13 +346,23 @@ _scd_Y19oug_match() {
             -v meanlife=$SCD_MEANLIFE \
             -v minlogprob=$MINLOGPROB \
             '
-            BEGIN { FS = "[:;]"; }
+            BEGIN {
+                FS = "[:;]";
+                pmin = exp(minlogprob);
+            }
             length($0) < 4096 && $2 > 0 {
+                df = $0;
+                sub("^[^;]*;", "", df);
+                if (!df)  next;
+                dp = df;
+                while (!(dp in ptot)) {
+                    ptot[dp] = pmin;
+                    sub("//*[^/]*$", "", dp);
+                    if (!dp)  break;
+                }
                 tau = 1.0 * ($2 - epochseconds) / meanlife;
-                if (tau < minlogprob)  tau = minlogprob;
-                prob = exp(tau);
-                sub(/^[^;]*;/, "");
-                if (NF)  ptot[$0] += prob;
+                prob = (tau < minlogprob) ? pmin : exp(tau);
+                ptot[df] += prob;
             }
             END { for (di in ptot)  { print di; print ptot[di]; } }
             '
@@ -330,19 +381,17 @@ _scd_Y19oug_match() {
 
     # discard ignored directories
     if [[ -z ${opt_all} ]]; then
-        for p in ${(k)scdignore}; do
-            p="*~$p"
-            drank=( ${(kv)drank[(I)${~p}]} )
+        for d in ${(k)drank}; do
+            [[ -z ${scdignore[(k)$d]} ]] || unset "drank[$d]"
         done
     fi
 
     # build a list of matching directories reverse-sorted by their probabilities
     dmatching=( ${(f)"$(
-        for d p in ${(kv)drank}; do
-            print -r -- "$p $d";
-        done | sort -grk1 | cut -d ' ' -f 2-
-        )"}
+        builtin printf "%s %s\n" ${(Oakv)drank} |
+        /usr/bin/sort -grk1 )"}
     )
+    dmatching=( ${dmatching#*[[:blank:]]} )
 
     # do not match $HOME or $PWD when run without arguments
     if [[ $# == 0 ]]; then
