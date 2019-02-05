@@ -226,9 +226,7 @@ function! s:ScdLoadAliases()
         let ca = substitute(strpart(line, 0, eq), '.*\s', '', '')
         let df = substitute(strpart(line, eq + 1), '\s*$', '', '')
         let df = substitute(df, "^'\\(.*\\)'$", '\1', '')
-        if isdirectory(df)
-            let ad[ca] = df
-        endif
+        let ad[ca] = df
     endfor
     let s:scd_alias = ad
     let s:scd_alias_mtime = getftime(s:scd_alias_file)
