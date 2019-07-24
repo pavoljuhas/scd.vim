@@ -169,7 +169,7 @@ endif
 
 function! s:ScdComplete(A, L, P)
     let aliases = {'a' : s:ScdLoadAliases()}
-    let anames1 = keys(aliases.a)
+    let anames1 = sort(keys(aliases.a))
     let anames2 = map(copy(anames1), '"~" . v:val')
     function aliases.expand(t) dict
         let idx = stridx(a:t, '/')
