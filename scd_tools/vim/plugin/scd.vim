@@ -82,8 +82,9 @@ command! -complete=custom,s:ScdComplete -nargs=* Slcd
 
 " main interface to the z-shell script
 function! s:ScdFun(cdcmd, scdargs)
-    let qargs = map(copy(a:scdargs),
-                \ '(v:val[0] == "~") ? v:val : shellescape(v:val)')
+    let qexpr = '(v:val[0] =~ "[%#]" && !empty(expand(v:val))) ? '
+                \ . 'shellescape(expand(v:val)) : v:val'
+    let qargs = map(copy(a:scdargs), qexpr)
     let cmd = join([s:scd_command, '--list'] + qargs, ' ')
     let output = system(cmd)
     if v:shell_error
