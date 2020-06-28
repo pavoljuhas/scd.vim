@@ -11,10 +11,16 @@ fi
 
 local DOC='scd -- smart change to a recently used directory
 usage: scd [options] [pattern1 pattern2 ...]
-Go to a directory path that contains all fixed string patterns.  Prefer
-recent or frequently visited directories as found in the directory index.
+Go to a directory path that matches all patterns.  Prefer recent or
+frequently visited directories as found in the directory index.
 Display a selection menu in case of multiple matches.
 
+Special patterns:
+  ^PAT      match at the path root, "^/home"
+  PAT$      match paths ending with PAT, "man$"
+  ./        match paths under the current directory
+  :PAT      require PAT to span the tail, ":doc", ":re/doc"
+ 
 Options:
   -a, --add         add current or specified directories to the index.
   --unindex         remove current or specified directories from the index.
@@ -23,9 +29,11 @@ Options:
                     store it in ~/.scdalias.zsh.
   --unalias         remove ALIAS definition for the current or specified
                     directory from ~/.scdalias.zsh.
+                    Use "OLD" to purge aliases to non-existent directories.
   -A, --all         display all directories even those excluded by patterns
                     in ~/.scdignore.  Disregard unique match for a directory
                     alias and filtering of less likely paths.
+  -p, --push        use "pushd" to change to the target directory.
   --list            show matching directories and exit.
   -v, --verbose     display directory rank in the selection menu.
   -h, --help        display this message and exit.
@@ -51,7 +59,7 @@ fi
 
 local a d m p i maxrank threshold
 local opt_help opt_add opt_unindex opt_recursive opt_verbose
-local opt_alias opt_unalias opt_all opt_list
+local opt_alias opt_unalias opt_all opt_push opt_list
 local -A drank dalias scdignore
 local dmatching
 local last_directory
@@ -72,7 +80,7 @@ zmodload -i zsh/parameter
 zparseopts -D -E -- a=opt_add -add=opt_add -unindex=opt_unindex \
     r=opt_recursive -recursive=opt_recursive \
     -alias:=opt_alias -unalias=opt_unalias \
-    A=opt_all -all=opt_all -list=opt_list \
+    A=opt_all -all=opt_all p=opt_push -push=opt_push -list=opt_list \
     v=opt_verbose -verbose=opt_verbose h=opt_help -help=opt_help \
     || $EXIT $?
 
@@ -121,7 +129,7 @@ _scd_Y19oug_abspath() {
             $PWDCASECORRECT &&
                 print -Nr -- $PWD ||
                 print -Nr -- (#i)$PWD
-            popd
+            popd 2>/dev/null
         done
         )"}
 }
@@ -148,9 +156,23 @@ fi
 
 # undefine one or more directory aliases
 if [[ -n $opt_unalias ]]; then
+    local -U uu
     local ec=0
+    uu=( ${*:-${PWD}} )
+    if (( ${uu[(I)OLD]} && ${+nameddirs[OLD]} == 0 )); then
+        uu=( ${uu:#OLD} ${(ps:\0:)"$(
+            hash -dr
+            if [[ -r $SCD_ALIAS ]]; then
+                source $SCD_ALIAS
+            fi
+            for a d in ${(kv)nameddirs}; do
+                [[ -d $d ]] || print -Nr -- $a
+            done
+            )"}
+        )
+    fi
     m=( )
-    for p in ${*:-${PWD}}; do
+    for p in $uu; do
         d=$p
         if [[ ${+nameddirs[$d]} == 0 && -d $d ]]; then
             _scd_Y19oug_abspath d $d
@@ -191,7 +213,8 @@ _scd_Y19oug_compress() {
             FS = "[:;]";
             pmin = exp(minlogprob);
         }
-        length($0) < 4096 && $2 > 0 {
+        /^: deleted:0;/ { next; }
+        length($0) < 4096 && $2 > 1000 {
             df = $0;
             sub("^[^;]*;", "", df);
             if (!df)  next;
@@ -215,12 +238,13 @@ _scd_Y19oug_compress() {
 }
 
 # Rewrite directory index if it is at least 20% oversized.
-if [[ -s $SCD_HISTFILE ]] && \
-(( $(wc -l <$SCD_HISTFILE) > 1.2 * $SCD_HISTSIZE )); then
+local curhistsize
+if [[ -z $opt_unindex && -s $SCD_HISTFILE ]] && \
+curhistsize=$(wc -l <$SCD_HISTFILE) && \
+(( $curhistsize > 1.2 * $SCD_HISTSIZE )); then
     # Compress repeated entries in a background process.
     (
         m=( ${(f)"$(_scd_Y19oug_compress $SCD_HISTFILE)"} )
-        curhistsize=( $(wc -l <$SCD_HISTFILE) )
         # purge non-existent and ignored directories
         m=( ${(f)"$(
             for a in $m; do
@@ -288,18 +312,22 @@ if [[ -n $opt_unindex ]]; then
             argv[i]=${d}
         fi
     done
+    # strip trailing slashes, but preserve the root path
+    argv=( ${argv/(#m)?\/##(#e)/${MATCH[1]}} )
     m="$(awk -v recursive=${opt_recursive} '
         BEGIN {
             for (i = 2; i < ARGC; ++i) {
                 argset[ARGV[i]] = 1;
                 delete ARGV[i];
             }
+            unindex_root = ("/" in argset);
         }
         1 {
             d = $0;  sub(/^[^;]*;/, "", d);
             if (d in argset)  next;
         }
         recursive {
+            if (unindex_root)  exit;
             for (a in argset) {
                 if (substr(d, 1, length(a) + 1) == a"/")  next;
             }
@@ -313,12 +341,18 @@ fi
 
 # The "action" function is called when there is just one target directory.
 _scd_Y19oug_action() {
-    builtin cd $1 || return $?
+    local cdcmd=cd
+    [[ -z ${opt_push} ]] || cdcmd=pushd
+    builtin $cdcmd $1 || return $?
     if [[ -z $SCD_SCRIPT && -n $RUNNING_AS_COMMAND ]]; then
         print -u2 "Warning: running as command with SCD_SCRIPT undefined."
     fi
     if [[ -n $SCD_SCRIPT ]]; then
-        print -r "cd ${(q)1}" >| $SCD_SCRIPT
+        local d=$1
+        if [[ $OSTYPE == cygwin && ${(L)SCD_SCRIPT} == *.bat ]]; then
+            d=$(cygpath -aw .)
+        fi
+        print -r "${cdcmd} ${(qqq)d}" >| $SCD_SCRIPT
     fi
 }
 
@@ -327,15 +361,30 @@ _scd_Y19oug_action() {
 _scd_Y19oug_match() {
     ## single argument that is an existing directory or directory alias
     if [[ -z $opt_all && $# == 1 ]] && \
-        [[ -d ${d::=$1} || -d ${d::=${nameddirs[$1]}} ]] && [[ -x $d ]];
+        [[ -d ${d::=${nameddirs[$1]}} || -d ${d::=$1} ]] && [[ -x $d ]];
     then
         _scd_Y19oug_abspath dmatching $d
         drank[${dmatching[1]}]=1
         return
     fi
 
+    # quote brackets when PWD is /Volumes/[C]/
+    local qpwd=${PWD//(#m)[][]/\\${MATCH}}
+
+    # support "./" as an alias for $PWD to match only subdirectories.
+    argv=( ${argv/(#s).\/(#e)/(#s)${qpwd}(|/*)(#e)} )
+
+    # support "./pat" as an alias for $PWD/pat.
+    argv=( ${argv/(#m)(#s).\/?*/(#s)${qpwd}${MATCH#.}} )
+
+    # support "^" as an anchor for the root directory, e.g., "^$HOME".
+    argv=( ${argv/(#m)(#s)\^?*/(#s)${${~MATCH[2,-1]}}} )
+
     # support "$" as an anchor at the end of directory name.
     argv=( ${argv/(#m)?[$](#e)/${MATCH[1]}(#e)} )
+
+    # support prefix ":" to match over the tail component.
+    argv=( ${argv/(#m)(#s):?*/${MATCH[2,-1]}[^/]#(#e)} )
 
     # calculate rank of all directories in SCD_HISTFILE and store it in drank.
     # include a dummy entry to avoid issues with splitting an empty string.
@@ -350,6 +399,12 @@ _scd_Y19oug_match() {
                 FS = "[:;]";
                 pmin = exp(minlogprob);
             }
+            /^: deleted:0;/ {
+                df = $0;
+                sub("^[^;]*;", "", df);
+                delete ptot[df];
+                next;
+            }
             length($0) < 4096 && $2 > 0 {
                 df = $0;
                 sub("^[^;]*;", "", df);
@@ -360,6 +415,7 @@ _scd_Y19oug_match() {
                     sub("//*[^/]*$", "", dp);
                     if (!dp)  break;
                 }
+                if ($2 <= 1000)  next;
                 tau = 1.0 * ($2 - epochseconds) / meanlife;
                 prob = (tau < minlogprob) ? pmin : exp(tau);
                 ptot[df] += prob;
@@ -399,12 +455,20 @@ _scd_Y19oug_match() {
     fi
 
     # keep at most SCD_MENUSIZE of matching and valid directories
+    # mark up any deleted entries in the index
+    local -A isdeleted
     m=( )
+    isdeleted=( )
     for d in $dmatching; do
         [[ ${#m} == $SCD_MENUSIZE ]] && break
-        [[ -d $d && -x $d ]] && m+=$d
+        (( ${+isdeleted[$d]} == 0 )) || continue
+        [[ -d $d ]] || { isdeleted[$d]=1; continue }
+        [[ -x $d ]] && m+=$d
     done
     dmatching=( $m )
+    if [[ -n ${isdeleted} ]]; then
+        print -lr -- ": deleted:0;"${^${(k)isdeleted}} >> $SCD_HISTFILE
+    fi
 
     # find the maximum rank
     maxrank=0.0
