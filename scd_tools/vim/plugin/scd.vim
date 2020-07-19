@@ -168,37 +168,11 @@ endif
 " Completion -----------------------------------------------------------------
 
 function! s:ScdComplete(A, L, P)
-    let aliases = {'a' : s:ScdLoadAliases()}
-    let anames1 = sort(keys(aliases.a))
-    let anames2 = map(copy(anames1), '"~" . v:val')
-    function aliases.expand(t) dict
-        let idx = stridx(a:t, '/')
-        let thead = strpart(a:t, 0, idx)
-        let ttail = strpart(a:t, idx)
-        let thead1 = strpart(thead, 1)
-        let exphead = (thead =~ '^[~]' && has_key(self.a, thead1)) ?
-                    \ self.a[thead1] : expand(thead)
-        return exphead . ttail
-    endfunction
-    " avoid globing and associated shell calls if we are expanding an alias
-    let searchdirs = (a:A !~ '^[~][^/]*$')
-    let Afull = aliases.expand(a:A)
-    let Apattern = substitute(Afull, '[*]*$', '*', '')
-    let dirnames = searchdirs ? split(glob(Apattern), '\n') : []
-    call filter(dirnames, 'isdirectory(v:val) && v:val !~ "/[.][.]\\?$"')
-    let dir = {'path' : {}, 'A' : a:A, 'Afull' : Afull, 'nf' : strlen(Afull)}
-    function dir.unique(d) dict
-        let self.path[a:d] = has_key(self.path, a:d)
-        return !self.path[a:d]
-    endfunction
-    function dir.unexpand(d) dict
-        let d1 = stridx(a:d, self.Afull) ? a:d : self.A . strpart(a:d, self.nf)
-        return escape(d1, ' \')
-    endfunction
-    call filter(dirnames, 'dir.unique(v:val)')
-    call map(dirnames, 'dir.unexpand(v:val)')
-    let suggestions = empty(a:A) ? (anames2 + dirnames) :
-                \ (a:A =~ '[?*]$') ? dirnames : (anames1 + anames2 + dirnames)
+    let aliases = s:ScdLoadAliases()
+    let suggestions = sort(keys(aliases))
+    if empty(a:A) || a:A[0] == '~'
+        call map(suggestions, '"~" . v:val')
+    endif
     return join(suggestions, "\n")
 endfunction
 
