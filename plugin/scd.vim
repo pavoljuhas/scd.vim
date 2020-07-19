@@ -169,13 +169,52 @@ endif
 " Completion -----------------------------------------------------------------
 
 function! s:ScdComplete(A, L, P)
-    call s:ScdParseCommandLine(a:A, a:L, a:P)
+    let context = s:ScdParseCommandLine(a:A, a:L, a:P)
+    let opts = context['options']
+    let words = context['words']
+    if has_key(opts, '--help')
+        return ''
+    endif
+    if a:A[0] == '-'
+        return s:ScdCompleteOption(context)
+    endif
+    if has_key(opts, '--unalias')
+        return s:ScdCompleteAlias(context)
+    endif
+    if has_key(opts, '--add') || has_key(opts, '--unindex')
+        return s:ScdCompleteDir(context)
+    endif
+    if !empty(get(opts, '--alias', '')) && empty(words)
+        return s:ScdCompleteDir(context)
+    endif
+    if empty(words)
+        return s:ScdCompleteAlias(context)
+    endif
+    return ''
+endfunction
+
+function! s:ScdCompleteAlias(context)
+    let ahead = a:context['ahead']
+    let atail = a:context['atail']
     let aliases = s:ScdLoadAliases()
     let suggestions = sort(keys(aliases))
-    if empty(a:A) || a:A[0] == '~'
+    if empty(ahead) || ahead[0] == '~'
         call map(suggestions, '"~" . v:val')
     endif
+    if !empty(atail)
+        let nt = len(atail)
+        call filter(suggestions, 'v:val[-nt:] == atail')
+        call map(suggestions, 'v:val[:-nt - 1]')
+    endif
     return join(suggestions, "\n")
+endfunction
+
+function! s:ScdCompleteDir(context)
+    return ''
+endfunction
+
+function! s:ScdCompleteOption(context)
+    return ''
 endfunction
 
 " Helper function for loading scd aliases
