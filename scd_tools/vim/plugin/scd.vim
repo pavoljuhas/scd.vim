@@ -126,6 +126,10 @@ endfunction
 let s:last_directory = getcwd()
 
 function! s:ScdAddChangedDir() abort
+    " respect g:scd_autoindex if set after loading this plugin
+    if exists('g:scd_autoindex') && !g:scd_autoindex
+        return
+    endif
     let cwd = getcwd()
     if s:last_directory == cwd
         return
