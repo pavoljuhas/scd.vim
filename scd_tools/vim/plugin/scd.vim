@@ -69,7 +69,7 @@ let s:scd_command = exists('g:scd_command') ? g:scd_command :
 unlet s:rel_cmd
 
 let s:scd_autoindex = exists('g:scd_autoindex') ? g:scd_autoindex : 1
-let s:scd_autoindex = s:scd_autoindex && (1 == executable(s:scd_command))
+let s:scd_autoindex = s:scd_autoindex && has('patch-7.4.503')
 
 " Define user Scd commands ---------------------------------------------------
 
@@ -114,7 +114,9 @@ function! s:ScdFun(cdcmd, scdargs)
         let target = dmatching[idx]
     endif
     execute a:cdcmd fnameescape(target)
-    call s:ScdAddChangedDir()
+    if s:scd_autoindex
+        call s:ScdAddChangedDir()
+    endif
     pwd
 endfunction
 
@@ -129,13 +131,6 @@ function! s:ScdAddChangedDir() abort
         return
     endif
     let s:last_directory = cwd
-    " Deprecated code for older Vim versions where writefile cannot append.
-    if v:version < 800
-        call system(s:scd_command . ' -a . &')
-        return
-    endif
-    " Record the current directory without calling system and thus
-    " overwriting the v:shell_error value.
     let scd_histfile = exists('$SCD_HISTFILE') ?
                 \ $SCD_HISTFILE : expand('~/.scdhistory')
     " Ensure history file exists.  If not create it with private permissions.
