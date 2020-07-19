@@ -169,6 +169,7 @@ endif
 " Completion -----------------------------------------------------------------
 
 function! s:ScdComplete(A, L, P)
+    call s:ScdParseCommandLine(a:A, a:L, a:P)
     let aliases = s:ScdLoadAliases()
     let suggestions = sort(keys(aliases))
     if empty(a:A) || a:A[0] == '~'
@@ -206,4 +207,47 @@ function! s:ScdLoadAliases()
     let s:scd_alias = ad
     let s:scd_alias_mtime = getftime(s:scd_alias_file)
     return s:scd_alias
+endfunction
+
+function! s:ScdParseCommandLine(A, L, P)
+    let pcmd = '\(^\|.*[|]\)[:[:blank:]]*Sl\?\%[cd]\s\+'
+    let cmdleft = strpart(a:L, 0, a:P - len(a:A))
+    let cmdleft = substitute(cmdleft, pcmd, '', '')
+    let mlist = matchlist(strpart(a:L, a:P), '^\(\S*\)\(\s\+.*\)\?$')
+    let rv = {'ahead': a:A, 'atail': mlist[1]}
+    let cmdright = mlist[2]
+    let argsleft = split(cmdleft, '\s\+')
+    let argsright = split(cmdright, '\s\+')
+    let rv['complete_options'] = (-1 == index(argsleft, '--'))
+    let argsall = argsleft + argsright
+    let opts = {}
+    let words = []
+    let popt = '\v^(-[arApvh]+|--add|--unindex|--recursive|--alias([=]\S*)?|'
+                \ . '--unalias|--all|--push|--list|--verbose|--help)$'
+    let shoptmap = {'a': '--add', 'r': '--recursive', 'A': '--all',
+                \   'p': '--push', 'v': '--verbose', 'h': '--help'}
+    while !empty(argsall)
+        let w = remove(argsall, 0)
+        if w == '--'
+            let words += argsall
+            let argsall = []
+            break
+        endif
+        if w !~ popt
+            call add(words, w)
+        elseif w[1] != '-'
+            for l:c in split(w[1:], '\zs')
+                let opts[shoptmap[l:c]] = ''
+            endfor
+        elseif w =~ '^--alias='
+            let opts['--alias'] = substitute(w, '^[^=]*[=]', '', '')
+        elseif w == '--alias'
+            let opts['--alias'] = empty(argsall) ? '' : remove(argsall, 0)
+        else
+            let opts[w] = ''
+        endif
+    endwhile
+    let rv['options'] = opts
+    let rv['words'] = words
+    return rv
 endfunction
