@@ -196,10 +196,15 @@ endfunction
 function! s:ScdCompleteAlias(context)
     let ahead = a:context['ahead']
     let atail = a:context['atail']
+    let opts = a:context['options']
     let aliases = s:ScdLoadAliases()
     let suggestions = sort(keys(aliases))
-    if empty(ahead) || ahead[0] == '~'
+    let unalias = has_key(opts, '--unalias')
+    if !unalias && (empty(ahead) || ahead[0] == '~')
         call map(suggestions, '"~" . v:val')
+    endif
+    if unalias && !has_key(aliases, 'OLD')
+        call insert(suggestions, 'OLD')
     endif
     if !empty(atail)
         let nt = len(atail)
