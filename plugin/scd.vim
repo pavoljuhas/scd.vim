@@ -223,7 +223,11 @@ function! s:ScdCompleteAlias(context)
 endfunction
 
 function! s:ScdCompleteDir(context)
-    return []
+    " bail out without error in old vim
+    if !has('patch-7.4.2011')
+        return []
+    endif
+    return getcompletion(a:context['ahead'], 'dir')
 endfunction
 
 function! s:ScdCompleteOption(context)
