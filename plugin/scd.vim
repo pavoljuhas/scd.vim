@@ -180,16 +180,19 @@ function! s:ScdGetCompletions(A, L, P)
     if has_key(opts, '--help')
         return []
     endif
+    if has_key(opts, '--alias') && empty(opts['--alias'])
+        return []
+    endif
     if context['ahead'][0] == '-'
         return s:ScdCompleteOption(context)
+    endif
+    if !empty(get(opts, '--alias', ''))
+        return empty(words) ? s:ScdCompleteDir(context) : []
     endif
     if has_key(opts, '--unalias')
         return s:ScdCompleteAlias(context)
     endif
     if has_key(opts, '--add') || has_key(opts, '--unindex')
-        return s:ScdCompleteDir(context)
-    endif
-    if !empty(get(opts, '--alias', '')) && empty(words)
         return s:ScdCompleteDir(context)
     endif
     if empty(words)
