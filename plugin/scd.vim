@@ -183,7 +183,7 @@ function! s:ScdGetCompletions(A, L, P)
     if has_key(opts, '--alias') && empty(opts['--alias'])
         return []
     endif
-    if context['ahead'][0] == '-'
+    if context['ahead'][0] == '-' && context['complete_options']
         return s:ScdCompleteOption(context)
     endif
     if !empty(get(opts, '--alias', ''))
@@ -231,7 +231,37 @@ function! s:ScdCompleteDir(context)
 endfunction
 
 function! s:ScdCompleteOption(context)
-    return []
+    let common = ['--help']
+    " order by likelihood of use
+    let mutex_groups = [
+                \ ['--all', '--list', '--verbose', '--push'],
+                \ ['--add', '--recursive'],
+                \ ['--alias'],
+                \ ['--unalias'],
+                \ ['--unindex', '--recursive'],
+                \ ]
+    " do not suggest options which have no effect in vim
+    let exclude = {'--list': '', '--push': ''}
+    let opts = a:context['options']
+    for olong in keys(opts)
+        let mutex_groups = filter(mutex_groups, '0 <= index(v:val, olong)')
+    endfor
+    let rv = []
+    for group in mutex_groups
+        let rv += group
+    endfor
+    let rv += common
+    let rv = filter(rv, '!has_key(opts, v:val)')
+    let rv = filter(rv, '!has_key(exclude, v:val)')
+    " remove duplicates while keeping the order of values
+    let isdup = repeat([0], len(rv))
+    let seen = {}
+    for idx in range(len(rv))
+        let isdup[idx] = has_key(seen, rv[idx])
+        let seen[rv[idx]] = 1
+    endfor
+    let rv = filter(rv, '!isdup[v:key]')
+    return rv
 endfunction
 
 " Helper function for loading scd aliases
