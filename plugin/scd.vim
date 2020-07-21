@@ -169,24 +169,33 @@ endif
 " Completion -----------------------------------------------------------------
 
 function! s:ScdComplete(A, L, P)
+    let suggestions = s:ScdGetCompletions(a:A, a:L, a:P)
+    return join(suggestions, "\n")
+endfunction
+
+function! s:ScdGetCompletions(A, L, P)
     let context = s:ScdParseCommandLine(a:A, a:L, a:P)
     let opts = context['options']
     let words = context['words']
-    let suggestions = []
     if has_key(opts, '--help')
-        let suggestions = []
-    elseif a:A[0] == '-'
-        let suggestions = s:ScdCompleteOption(context)
-    elseif has_key(opts, '--unalias')
-        let suggestions = s:ScdCompleteAlias(context)
-    elseif has_key(opts, '--add') || has_key(opts, '--unindex')
-        let suggestions = s:ScdCompleteDir(context)
-    elseif !empty(get(opts, '--alias', '')) && empty(words)
-        let suggestions = s:ScdCompleteDir(context)
-    elseif empty(words)
-        let suggestions = s:ScdCompleteAlias(context)
+        return []
     endif
-    return join(suggestions, "\n")
+    if context['ahead'][0] == '-'
+        return s:ScdCompleteOption(context)
+    endif
+    if has_key(opts, '--unalias')
+        return s:ScdCompleteAlias(context)
+    endif
+    if has_key(opts, '--add') || has_key(opts, '--unindex')
+        return s:ScdCompleteDir(context)
+    endif
+    if !empty(get(opts, '--alias', '')) && empty(words)
+        return s:ScdCompleteDir(context)
+    endif
+    if empty(words)
+        return s:ScdCompleteAlias(context)
+    endif
+    return []
 endfunction
 
 function! s:ScdCompleteAlias(context)
