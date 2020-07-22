@@ -227,7 +227,17 @@ function! s:ScdCompleteDir(context)
     if !has('patch-7.4.2011')
         return []
     endif
-    return getcompletion(a:context['ahead'], 'dir')
+    let ahead = a:context['ahead']
+    if ahead[0] == '~'
+        let tildename = substitute(ahead, '[/\\].*', '', '')
+        let tildevalue = expand(tildename)
+        let rv = getcompletion(tildevalue . ahead[len(tildename):], 'dir')
+        let idx = len(tildevalue)
+        let rv = map(rv, 'tildename . v:val[idx:]')
+    else
+        let rv = getcompletion(ahead, 'dir')
+    endif
+    return rv
 endfunction
 
 function! s:ScdCompleteOption(context)
