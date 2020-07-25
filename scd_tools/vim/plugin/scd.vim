@@ -91,6 +91,7 @@ function! s:ScdFun(cdcmd, scdargs)
         echo output
         return
     endif
+    let output = substitute(output, '\_s*$', '', '')
     let lines = split(output, '\n')
     let cnt = len(lines)
     " even lines have directory alias names prefixed with '# '
