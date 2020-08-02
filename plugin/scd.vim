@@ -8,6 +8,8 @@
 "   * Linux, Mac OS X or other unix-like operating system
 "   * Z shell (usually the "zsh" package in Linux)
 "
+" FIXME - review and update below
+"
 " Installation:
 "
 "   (A) Manual
@@ -58,13 +60,11 @@ let loaded_scd = 1
 
 " Parse configuration variables ----------------------------------------------
 
-" expected relative location of the scd script within Git bundle
-let s:rel_cmd = fnamemodify(resolve(expand('<sfile>')), ':h:h:h') . '/bin/scd'
+" Relative location of the scd script within scd.vim repository
+let s:rel_cmd = expand('<sfile>:p:h:h') . '/scd_tools/bin/scd'
 " Resolve command name for the z-shell scd script: (i) use g:scd_command if
-" defined, (ii) when this file is symlinked or scd is not in the PATH, check
-" at the relative location, (iii) just fall back to scd.
+" defined, (ii) use scd included with this plugin, (iii) just fall back to scd.
 let s:scd_command = exists('g:scd_command') ? g:scd_command :
-        \ (('link' == getftype(expand('<sfile>')) || 1 != executable('scd'))) &&
         \ (1 == executable(s:rel_cmd)) ? s:rel_cmd : 'scd'
 unlet s:rel_cmd
 
