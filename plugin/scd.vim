@@ -1,1 +1,0 @@
-../scd_tools/vim/plugin/scd.vim
