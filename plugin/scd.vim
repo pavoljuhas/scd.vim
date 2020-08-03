@@ -169,12 +169,109 @@ endif
 " Completion -----------------------------------------------------------------
 
 function! s:ScdComplete(A, L, P)
+    let suggestions = s:ScdGetCompletions(a:A, a:L, a:P)
+    return join(suggestions, "\n")
+endfunction
+
+function! s:ScdGetCompletions(A, L, P)
+    let context = s:ScdParseCommandLine(a:A, a:L, a:P)
+    let opts = context['options']
+    let words = context['words']
+    if has_key(opts, '--help')
+        return []
+    endif
+    if has_key(opts, '--alias') && empty(opts['--alias'])
+        return []
+    endif
+    if context['ahead'][0] == '-' && context['complete_options']
+        return s:ScdCompleteOption(context)
+    endif
+    if !empty(get(opts, '--alias', ''))
+        return empty(words) ? s:ScdCompleteDir(context) : []
+    endif
+    if has_key(opts, '--unalias')
+        return s:ScdCompleteAlias(context)
+    endif
+    if has_key(opts, '--add') || has_key(opts, '--unindex')
+        return s:ScdCompleteDir(context)
+    endif
+    if empty(words)
+        return s:ScdCompleteAlias(context)
+    endif
+    return []
+endfunction
+
+function! s:ScdCompleteAlias(context)
+    let ahead = a:context['ahead']
+    let atail = a:context['atail']
+    let opts = a:context['options']
     let aliases = s:ScdLoadAliases()
     let suggestions = sort(keys(aliases))
-    if empty(a:A) || a:A[0] == '~'
+    let unalias = has_key(opts, '--unalias')
+    if !unalias && (empty(ahead) || ahead[0] == '~')
         call map(suggestions, '"~" . v:val')
     endif
-    return join(suggestions, "\n")
+    if unalias && !has_key(aliases, 'OLD')
+        call insert(suggestions, 'OLD')
+    endif
+    if !empty(atail)
+        let nt = len(atail)
+        call filter(suggestions, 'v:val[-nt:] == atail')
+        call map(suggestions, 'v:val[:-nt - 1]')
+    endif
+    return suggestions
+endfunction
+
+function! s:ScdCompleteDir(context)
+    " bail out without error in old vim
+    if !has('patch-7.4.2011')
+        return []
+    endif
+    let ahead = a:context['ahead']
+    if ahead[0] == '~'
+        let tildename = substitute(ahead, '[/\\].*', '', '')
+        let tildevalue = expand(tildename)
+        let rv = getcompletion(tildevalue . ahead[len(tildename):], 'dir')
+        let idx = len(tildevalue)
+        let rv = map(rv, 'tildename . v:val[idx:]')
+    else
+        let rv = getcompletion(ahead, 'dir')
+    endif
+    return rv
+endfunction
+
+function! s:ScdCompleteOption(context)
+    let common = ['--help']
+    " order by likelihood of use
+    let mutex_groups = [
+                \ ['--all', '--list', '--verbose', '--push'],
+                \ ['--add', '--recursive'],
+                \ ['--alias'],
+                \ ['--unalias'],
+                \ ['--unindex', '--recursive'],
+                \ ]
+    " do not suggest options which have no effect in vim
+    let exclude = {'--list': '', '--push': ''}
+    let opts = a:context['options']
+    for olong in keys(opts)
+        let mutex_groups = filter(mutex_groups, '0 <= index(v:val, olong)')
+    endfor
+    let rv = []
+    for group in mutex_groups
+        let rv += group
+    endfor
+    let rv += common
+    let rv = filter(rv, '!has_key(opts, v:val)')
+    let rv = filter(rv, '!has_key(exclude, v:val)')
+    " remove duplicates while keeping the order of values
+    let isdup = repeat([0], len(rv))
+    let seen = {}
+    for idx in range(len(rv))
+        let isdup[idx] = has_key(seen, rv[idx])
+        let seen[rv[idx]] = 1
+    endfor
+    let rv = filter(rv, '!isdup[v:key]')
+    return rv
 endfunction
 
 " Helper function for loading scd aliases
@@ -206,4 +303,47 @@ function! s:ScdLoadAliases()
     let s:scd_alias = ad
     let s:scd_alias_mtime = getftime(s:scd_alias_file)
     return s:scd_alias
+endfunction
+
+function! s:ScdParseCommandLine(A, L, P)
+    let pcmd = '\(^\|.*[|]\)[:[:blank:]]*Sl\?\%[cd]\s\+'
+    let cmdleft = strpart(a:L, 0, a:P - len(a:A))
+    let cmdleft = substitute(cmdleft, pcmd, '', '')
+    let mlist = matchlist(strpart(a:L, a:P), '^\(\S*\)\(\s\+.*\)\?$')
+    let rv = {'ahead': a:A, 'atail': mlist[1]}
+    let cmdright = mlist[2]
+    let argsleft = split(cmdleft, '\s\+')
+    let argsright = split(cmdright, '\s\+')
+    let rv['complete_options'] = (-1 == index(argsleft, '--'))
+    let argsall = argsleft + argsright
+    let opts = {}
+    let words = []
+    let popt = '\v^(-[arApvh]+|--add|--unindex|--recursive|--alias([=]\S*)?|'
+                \ . '--unalias|--all|--push|--list|--verbose|--help)$'
+    let shoptmap = {'a': '--add', 'r': '--recursive', 'A': '--all',
+                \   'p': '--push', 'v': '--verbose', 'h': '--help'}
+    while !empty(argsall)
+        let w = remove(argsall, 0)
+        if w == '--'
+            let words += argsall
+            let argsall = []
+            break
+        endif
+        if w !~ popt
+            call add(words, w)
+        elseif w[1] != '-'
+            for l:c in split(w[1:], '\zs')
+                let opts[shoptmap[l:c]] = ''
+            endfor
+        elseif w =~ '^--alias='
+            let opts['--alias'] = substitute(w, '^[^=]*[=]', '', '')
+        elseif w == '--alias'
+            let opts['--alias'] = empty(argsall) ? '' : remove(argsall, 0)
+        else
+            let opts[w] = ''
+        endif
+    endwhile
+    let rv['options'] = opts
+    let rv['words'] = words
+    return rv
 endfunction
